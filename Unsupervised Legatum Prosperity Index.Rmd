@@ -4,27 +4,864 @@ author: "Alp ALTINÖZ"
 date: "04/08/2021"
 output: html_document
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+##### **Required Libraries**
+```{r, warning=FALSE, message=FALSE}
+library(readxl)
+library(factoextra)
+library(NbClust)
+library(cluster)
+library(dbscan)
+library(fpc)
+library(clValid)
+library(dendextend)
+library(clustertend)
+library(mclust)
+library(tidyr)
+library(dplyr)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## **Obtain and interpret descriptive statistics.**
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r, message=FALSE,warning=FALSE}
+data <- read_xlsx("C:/Users/Dell/Downloads/hw_dataset_tmp.xlsx")
+indexnames <- data$`ADJUST PILLAR WEIGHTING`
+data <- subset(data, select = -c(...1,`ADJUST PILLAR WEIGHTING`))
+rownames(data) <- indexnames
+# Is there any missing observation in data?
+sum(is.na(data))
+summary(data)
 ```
 
-## Including Plots
+* There are no missing observations in the data.
+* We removed the columns that we will not use from the data.
+* We have registered the country names as an index.
 
-You can also embed plots, for example:
+## **Descriptive Statistics**
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#### **Safety_Security**
+```{r}
+hist(data$safety_security)
+boxplot(data$safety_security)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+* Safety Security variable is skewed from left.
+* According to the boxplot, there are 5 outliers.
+
+#### **Personal_Freedom**
+```{r}
+hist(data$personal_freedom)
+boxplot(data$personal_freedom)
+```
+
+* Personnel Freedom variable is close to normal distribution.
+* No outliers visible in boxplot.
+
+#### **Governance**
+```{r}
+hist(data$governance)
+boxplot(data$governance)
+```
+
+* Governance variable is close to normal distribution.
+* No outliers visible in boxplot.
+
+#### **Social_Capital**
+```{r}
+hist(data$social_capital)
+boxplot(data$social_capital)
+```
+
+* Social Capital variable is close to normal distribution.
+* There are outliers visible in boxplot.
+
+#### **Investment_Enviorment**
+```{r}
+hist(data$investment_environment)
+boxplot(data$investment_environment)
+```
+
+* Investment Enviorment variable is normally distributed.
+* No outliers visible in boxplot.
+
+#### **Enterprise Conditions**
+```{r}
+hist(data$enterprise_conditions)
+boxplot(data$enterprise_conditions)
+```
+
+* Enterprise Conditon variable is close to normal distribution.
+* 1 outlier visible in boxplot.
+
+#### **Market_Access**
+```{r}
+hist(data$market_access)
+boxplot(data$market_access)
+```
+
+* Market Access variable is close to normal distribution.
+* No outliers visible in boxplot.
+
+#### **Economic_quality**
+```{r}
+hist(data$economic_quality)
+boxplot(data$economic_quality)
+```
+
+* Economic quality variable close to right-skewed distribution.
+* No outliers visible in boxplot.
+
+#### **Living_Conditions**
+```{r}
+hist(data$living_conditions)
+boxplot(data$living_conditions)
+```
+
+* Living Conditions variable is skewed from left.
+* No outliers visible in boxplot.
+
+#### **Health**
+```{r}
+hist(data$health)
+boxplot(data$health)
+```
+
+* Health variable is skewed from left.
+* 1 outlier visible in boxplot.
+
+#### **Education**
+```{r}
+hist(data$education)
+boxplot(data$education)
+```
+
+* Education variable is skewed from left.
+* No outliers visible in boxplot.
+
+#### **Natural Enviorment**
+```{r}
+hist(data$natural_environment)
+boxplot(data$natural_environment)
+```
+
+* Natural Enviorment variable is skewed from right.
+* 2 outliers visible in boxplot.
+
+
+```{r}
+apply(data, 2, mean)
+apply(data, 2, var)
+```
+
+* When the sizes and units of the values of the data are the same, it is appropriate to apply PCA with the Variance-Covariance method, although this data seems very suitable for this, however there are 5 times the variances among the variances (LivingConditions, natural_enviorment). For this reason, I will apply PCA with the Correlation Matrix method instead of Variance-Covariance.
+
+
+```{r,warning=FALSE, message=FALSE}
+library("corrplot")
+corr=cor((data), method = "pearson")
+corrplot.mixed(corr, lower="pie",upper="number")
+```
+
+* There are multiple highly positively correlated variables in the data, we hope to overcome this multicollinearity problem with PCA analysis.
+
+
+## **PCA**
+
+```{r}
+pca_data<-prcomp(data,center=TRUE,scale=TRUE)
+summary(pca_data)
+```
+
+* By adding scale=True and center=True commands, we apply PCA with the correlation matrix method.
+* With PCA, we can explain ~74% of the total change in the data with only the first PCA variable, and 82% of the total change in the data with the first two PCA variables.
+* In the literature, 70-75% explanation level is sufficient and we explain 82% with 2 variables.
+
+#### **Determine number of PCA variables using Scree-plot and Standard Deviation**
+
+```{r}
+fviz_eig(pca_data)
+pca_data$sdev
+```
+
+* Parallel to the result I deduced from the PCA table, the elbow occurs in 2 variables in the Scree graph.
+* We use variables whose standard deviation squared is 1 and greater than 1 in PCA analysis, which suggests 2-variable PCA in line with my other findings.
+
+
+## **2 Variable PCA**
+
+```{r}
+pca_data$rotation[,1:2]
+```
+
+* When we look at the PCA values, the variable PC1 is affected by all variables, there is no prominent variable, while PC2 is more affected by the Personal_freedom and natural_enviorment and, albeit slightly from the health variable.
+
+* The slightly variable PC2 explains us more variables that are far from economic or political variables such as freedom, environment, health. This is not the case in PC1 but having it in PC2 is a bonus for ease of interpretation of results.
+
+```{r}
+fviz_pca_biplot(pca_data, label = "var" ,gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07") , col.ind = "cos2" )
+```
+
+* Since there is no negatively correlated variable in the data, there is no variable pair with an angle greater than 90 degrees.
+
+* We see that the low-correlated variables make an angle of 90 degrees. Some examples;
+  health - personal_freedom,
+  natural_enviorment - education
+  living_conditions - personal_freedom
+  
+* Higher correlated variables form very low degree angles with each other. Some examples;
+  economic_quality - investment_enviorment
+  enterprise_conditions - social_capital
+  natural_enviorment - persona_freedom
+
+* The distribution of the data seems suitable for cluster analysis, no preprocessing is required.
+
+## **Obtain and interpret the distance matrices.**
+
+* As a measure of distance, I will prefer Euclidean to Pearson because the data is already very correlated with each other. Pearson is a distance measure that reveals more similarities, so it makes more sense to me to use Euclidean.
+
+#### **Matrix and heatmap created with Euclidean distance**
+
+```{r}
+dist_eucl=dist(data, method="euclidean") 
+head(round(as.matrix(dist_eucl)[,1:20]))
+fviz_dist(dist_eucl)
+```
+
+#### **Matrix and heatmap created with Manhattan distance**
+
+```{r}
+dist_man=dist(data, method="manhattan") 
+head(round(as.matrix(dist_man)[,1:20]))
+fviz_dist(dist_man)
+```
+
+* It seems that choosing Manhattan is not very meaningful, and the numbers in the distance matrix are getting bigger and it is getting harder to interpret.
+* Manhattan heatmap shows less grouping than Euclidean
+* Manhattan works better on data with severe outliers, I don't think this data has a serious outlier problem.
+
+* As a result, I will use the Euclidean distance measure when constructing the clusters.
+
+
+
+## **K-Means**
+
+```{r}
+pca2 = pca_data$x[,1:2]
+
+fviz_nbclust(pca2,kmeans,method="wss")
+fviz_nbclust(pca2,kmeans,method="silhouette")
+fviz_nbclust(pca2,kmeans,method="gap_stat")
+```
+
+* The WSS method recommends having 2 or 3 clusters.
+* Silhouette method recommends 3 clusters.
+* The gap stats method suggests 7 clusters.
+* 3 sets seems optimal, but I'll try them all.
+
+##### **2 Cluster K-Means**
+
+```{r,warning=FALSE, message=FALSE}
+set.seed(391)
+
+km_res_2 <- kmeans(pca2, 2, nstart= 50)
+print(km_res_2$betweenss/km_res_2$totss); print(km_res_2$size)
+
+fviz_cluster(km_res_2, data = pca2,
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+km_data_means2 <- eclust(pca2, "kmeans", k = 2, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_means2, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_means2$silinfo
+means_2 <- silinfo$avg.width
+```
+
+
+* Accuracy stays very low at 59%
+* The number of elements of the clusters is very different from each other (105-62)
+* Clusters have too much variance within themselves, too far from each other, observations included in the same cluster.
+* The silhouette coefficient indicates how well an observation is clustered. This value is calculated separately for all observations and the average is usually used. A value of 1 indicates that it is good, a value of 0 indicates that it is between two clusters, and a negative value indicates that it is clustered incorrectly.
+* The average Silhouette coefficient has an average value of 0.42
+
+
+
+##### **3 Cluster K-Means**
+
+```{r,warning=FALSE, message=FALSE}
+
+km_res_3 <- kmeans(pca2, 3, nstart= 50)
+print(km_res_3$betweenss/km_res_3$totss); print(km_res_3$size)
+
+fviz_cluster(km_res_3, data = pca2,
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+km_data_means3 <- eclust(pca2, "kmeans", k = 3, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_means3, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_means3$silinfo
+means_3 <- silinfo$avg.width
+```
+
+* Accuracy is fine with ~80%
+* Although the element numbers of the clusters are not ideal, they are close to each other.
+* Even if the variance of the clusters is not as bad as 2 cluster model, it is not very acceptable. If I cannot find a better alternative, 3 clusters can be selected.
+* Silhouette value remains the same 0.49
+
+
+##### **7 Cluster K-Means **
+
+```{r,warning=FALSE, message=FALSE}
+
+km_res_7 <- kmeans(pca2, 7, nstart= 50)
+print(km_res_7$betweenss/km_res_7$totss); print(km_res_7$size)
+
+fviz_cluster(km_res_7, data = pca2,
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+km_data_means7 <- eclust(pca2, "kmeans", k = 7, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_means7, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_means7$silinfo
+means_7 <- silinfo$avg.width
+
+```
+
+
+* Accuracy is very high with 91%, a positive situation
+* The number of elements of the clusters is close to each other, which is positive.
+* But since there are 7 clusters, the clusters are not very intertwined with each other, so I cannot choose 7 clusters.
+* Silhouette value calculated as 0.41. There is a decrease. Models with lower cluster number cluster better.
+* I am not very satisfied with my suggested cluster numbers, 3 seems like my best option, although not ideal. But I want to look at what happens with 4 clusters.
+
+
+##### **4 Cluster K-Means**
+```{r,warning=FALSE, message=FALSE}
+
+km_res_4 <- kmeans(pca2, 4, nstart= 50)
+print(km_res_4$betweenss/km_res_4$totss); print(km_res_4$size)
+
+fviz_cluster(km_res_4, data = pca2,
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+
+km_data_means4 <- eclust(pca2, "kmeans", k = 4, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_means4, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_means4$silinfo
+means_4 <- silinfo$avg.width
+```
+
+* Accuracy 87% very positive
+* Cluster element numbers are not very ideal
+*Unfortunately, the clusters are so intertwined that the same problem exists in 7 clusters.
+* This is the k-means model with the lowest Silhouette coefficient.
+
+
+* As a result, although I am not very comfortable, I choose 3 clusters, because the problem of interlocking of clusters starting in 4 clusters and continuing at higher cluster numbers (such as 7) arises. This problem makes it impossible to interpret cluster analysis.
+
+* There is a variance problem in the 3-k-means, all clusters have very distant observations in PC2 dimension. But since I don't have a better alternative, I choose 3 Cluster for k-means method.
+
+
+#### **K-Medoids**
+
+* The K-Medoids method gives better results in severe extreme data, as I mentioned before when choosing the distance measure, I don't think such a problem in data is enough to use K-Medoids. But just to be sure, I will still use this method.
+
+```{r}
+fviz_nbclust(pca2,pam,method="wss")
+fviz_nbclust(pca2,pam,method="silhouette")
+fviz_nbclust(pca2,pam,method="gap_stat")
+
+```
+  
+* WSS chart recommends 2 and 3 clusters
+* silhouette suggests 2 sets
+* Gap stats suggest 6 clusters
+
+##### **2 Cluster K-Medoid**
+```{r,warning=FALSE, message=FALSE}
+set.seed(391)
+
+
+pam_res_2 <- pam(pca2, 2, metric = "euclidean")
+print(pam_res_2$objective); print(pam_res_2$id.med)
+
+fviz_cluster(pam_res_2, data = df_sc,
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+km_data_med2 <- eclust(pca2, "pam", k = 2, graph = TRUE)
+fviz_silhouette(km_data_med2, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_med2$silinfo
+silinfo
+med_2 <- silinfo$avg.width
+```
+
+
+
+##### **3 küme K-Medoid**
+
+```{r,warning=FALSE, message=FALSE}
+pam_res_3 <- pam(pca2, 3, metric = "euclidean")
+print(pam_res_3$objective); print(pam_res_3$id.med)
+
+fviz_cluster(pam_res_3, data = df_sc,
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+
+km_data_med3 <- eclust(pca2, "pam", k = 3, graph = TRUE)
+fviz_silhouette(km_data_med3, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_med3$silinfo
+med_3 <- silinfo$avg.width
+
+```
+
+##### **4 küme K-Medoid**
+
+```{r,warning=FALSE, message=FALSE}
+
+pam_res_4 <- pam(pca2, 4, metric = "euclidean")
+print(pam_res_4$objective); print(pam_res_4$id.med)
+
+fviz_cluster(pam_res_4, data = df_sc,
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+km_data_med4 <- eclust(pca2, "pam", k = 3, graph = TRUE)
+fviz_silhouette(km_data_med4, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_med4$silinfo
+med_4 <- silinfo$avg.width
+
+```
+
+
+
+* Almost the same results as K-Means method
+* Too much variance in 2 clusters
+* There is a problem of nesting of clusters in 4 clusters
+* 3-cluster is still the best alternative, but the variance problem is clearly visible.
+* As the number of clusters increases, the Silhouette coefficient decreases.
+
+* The data doesn't have enough observations(>1000) to use Clara method anyway so I won't use it
+* K-Medoids delivered almost the same results as K-means.
+* I would not prefer the K-Medoids method because there are not many extreme values in this data, but if I were to prefer it, I would choose the model with 3 clusters.
+
+
+#### **Hierarchical Cluster Analysis**
+
+* In the step of standardizing the data, which is the first part of the hierarchical clustering analysis, I will use data that has already been PCA analysis applied, so this process has already been done, so there is no need to repeat it.
+* I am thinking of using the Euclidean distance measure as I used above for distance and similarity measure. However, in hierarchical analysis, it is important that the correlation coefficient of the intercluster distance and cogenetic distance matrices is greater than 0.75. When choosing the distance measure method, I will consider the correlations of both the Manhattan and the Euclidean distance measure with the cogenetic distance matrix.
+* While creating the model with measured data in K-means and K-medoids methods, modeling with distance matrices is used in hierarchical clustering.
+
+```{r,warning=FALSE, message=FALSE}
+
+dist_euc=dist(pca2, method="euclidean")
+dist_man=dist(pca2, method="manhattan")
+as.matrix(dist_euc)[1:6,1:6]
+as.matrix(dist_man)[1:6,1:6]
+
+```
+  
+* For the connection function, the first thing that came to my mind was the ward connection method because we saw that the observations were very close to each other in the pca data graphics. Even though the variance explanatory power of 4 clusters is superior, I did not prefer 4 because the clusters are very intertwined. For this reason, the ward method, which provides variance minimization, makes more sense.
+
+
+#### **Link Function Ward**
+```{r,warning=FALSE, message=FALSE}
+hc_e_w=hclust(d=dist_euc, method="ward.D2")
+plot(hc_e_w)
+coph_e_w=cophenetic(hc_e_w)
+as.matrix(coph_e_w)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_e_w)
+
+
+hc_m_w=hclust(d=dist_man, method="ward.D2")
+plot(hc_m_w)
+coph_m_w=cophenetic(hc_m_w)
+as.matrix(coph_m_w)[1:6,1:6]
+as.matrix(dist_man)[1:6,1:6]
+cor(dist_man,coph_m_w)
+```
+
+* Although Euclid and Manhattan have similar functions, they have very different groupings, dendograms turned out to be very different.
+* In the literature, when the correlation between the cogenetic distance matrix and the distance matrices is 0.75 and above, the clustering tree is considered to have clustered successfully. With the ward link function in both distance measures, this 0.75i could not be achieved. Euclid remained at 0.69 and Manhattan at 0.61. Euclidean performed better but it's not enough I'll try to calculate correlations with other link functions and find the best
+
+
+#### **Link Function Median**
+
+* Unlike the Ward function, it considers the median distances between two sets.
+```{r,warning=FALSE, message=FALSE}
+hc_e_m = hclust(dist_euc, method = "median")
+plot(hc_e_m)
+coph_e_m=cophenetic(hc_e_m)
+as.matrix(coph_e_m)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_e_m)
+
+hc_m_m = hclust(dist_man, method = "median")
+plot(hc_m_m)
+coph_m_m=cophenetic(hc_m_m)
+as.matrix(coph_m_m)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_m_m)
+
+```
+* As I expected, the ward connection function gave better results than the median connection function, we can see this from the correlation values (0.56).
+* Also, when we examine the dendogram, Singapore is included in a cluster at a very high cogenetic distance.
+
+#### **Link Function Centeroid**
+
+* Unlike the Ward function, it considers the distances between the centeroids of two sets.
+```{r,warning=FALSE, message=FALSE}
+hc_e_c = hclust(dist_euc, method = "centroid")
+plot(hc_e_c)
+coph_e_c=cophenetic(hc_e_c)
+as.matrix(coph_e_c)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_e_c)
+
+hc_m_c = hclust(dist_man, method = "centroid")
+plot(hc_m_c)
+coph_m_c=cophenetic(hc_m_c)
+as.matrix(coph_m_c)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_m_c)
+```
+
+* Centeroid connection function, 0.72 correlation with Manhattan distance measure, best result among 6 models. I expected Ward to be the best, but Centeroid did better, up to 3% better. But when we examine the dendogram of this model, I see that it is not a very optimal dendogram. Singapore, Syria and South Sudan are included in the cluster at high cogenetic values. I think the 3% correlation difference is not enough to close this problem. I will prefer the model with Ward connection function and Euclidean distance measurement.
+
+
+#### **Link Function Average**
+
+
+```{r,warning=FALSE, message=FALSE}
+hc_e_a = hclust(dist_euc, method = "average")
+plot(hc_e_a)
+coph_e_a=cophenetic(hc_e_a)
+as.matrix(coph_e_a)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_e_a)
+
+hc_m_a = hclust(dist_man, method = "average")
+plot(hc_m_a)
+coph_m_a=cophenetic(hc_m_a)
+as.matrix(coph_m_a)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_m_a)
+
+
+
+```
+
+* Average link function and Manhattan distance measure seem to have given the best results so far. The correlation coefficient is 0.72, but in the dendogram, Sudan, Singapore, South Sudan and Yemen are included in the clusters with very high cogenetic values.
+
+
+#### **Link Function mcquitty**
+
+
+```{r,warning=FALSE, message=FALSE}
+hc_e_mc = hclust(dist_euc, method = "mcquitty")
+plot(hc_e_mc)
+coph_e_mc=cophenetic(hc_e_mc)
+as.matrix(coph_e_mc)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_e_mc)
+
+hc_m_mc = hclust(dist_man, method = "mcquitty")
+plot(hc_m_mc)
+coph_m_mc=cophenetic(hc_m_mc)
+as.matrix(coph_m_mc)[1:6,1:6]
+as.matrix(dist_euc)[1:6,1:6]
+cor(dist_euc,coph_m_mc)
+
+```
+
+* With this link function, there are observations included in the clusters with the same high cogenetic values. In my opinion, higher correlation coefficients (2%-3%) than the model with ward function do not make the aforementioned models more preferable.
+
+* For the result, I prefer the model with Ward connection function and Euclidean distance criterion, which has a more acceptable dendogram.
+
+
+#### **Where to cut Hierarchical Tree**
+
+* At this stage, I will investigate how many groups I should divide the model I created.
+
+#### **3 Group**
+```{r,warning=FALSE, message=FALSE}
+grup=cutree(hc_e_w, k=3)
+table(grup)
+
+
+fviz_dend(hc_e_w, k = 3, # Cut in four groups
+          cex = 0.5, # label size
+          k_colors = "lancet",
+          color_labels_by_k = TRUE, # color labels by groups
+          rect = TRUE # Add rectangle around groups
+)
+
+
+fviz_cluster(list(data = data, cluster = grup),
+             palette = "lancet",
+             ellipse.type = "convex", # Concentration ellipse
+             repel = TRUE, # Avoid label overplotting (slow)
+             show.clust.cent = FALSE, ggtheme = theme_minimal())
+
+
+km_data_hc3 <- eclust(pca2, "hclust", k = 3, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_hc3, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_hc3$silinfo
+hc_3 <- silinfo$avg.width
+
+```
+
+* I started my group number experiments with 3 groups. The element numbers of the clusters seem close to each other.
+* When I look at the dendogram, it seems that if I increase the number of clusters, it seems that larger clusters may be suitable, as well as more homogeneous groups.
+* In the cluster plot, I see that there are overlaps in the 2nd and 3rd groups.
+* The problem that I encountered in my previous k-means and medodoids analysis is still that there is a lot of homogeneity in the cluster.
+* The silhouette coefficient is an average value calculated as 0.46.
+
+#### **4 Group**
+```{r,warning=FALSE, message=FALSE}
+grup=cutree(hc_e_w, k=4)
+table(grup)
+
+
+fviz_dend(hc_e_w, k = 4, # Cut in four groups
+          cex = 0.5, # label size
+          k_colors = "lancet",
+          color_labels_by_k = TRUE, # color labels by groups
+          rect = TRUE # Add rectangle around groups
+)
+
+
+fviz_cluster(list(data = data, cluster = grup),
+             palette = "lancet",
+             ellipse.type = "convex", # Concentration ellipse
+             repel = TRUE, # Avoid label overplotting (slow)
+             show.clust.cent = FALSE, ggtheme = theme_minimal())
+
+km_data_hc4 <- eclust(pca2, "hclust", k = 4, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_hc4, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_hc4$silinfo
+hc_4 <- silinfo$avg.width
+
+```
+
+* The number of elements of the clusters is very unstable, not at an acceptable level.
+* As seen in the dendogram, especially the green and light blue clusters are very heterogeneous. We can understand this situation thanks to clusters that combine at high cogenetic values.
+* When I look at the cluster graph, I see the problem of nesting in both green and turquoise clusters and high variance within the cluster.
+* For this data, the problem of inter-cluster variance can be solved with higher cluster numbers (6), but PC1 and PC2 independent variables, which we found as a result of PCA analysis, represent almost all of the original independent variables. We cant say first cluster represents richer countries or second cluster represents more just countries. For this reason, when we divide it into more clusters, the interpretation of these clusters will become more difficult.
+* The silhouette coefficient is calculated as 0.42, as in other methods, the silhouette coefficient decreases as the number of clusters increases.
+
+#### **5 Group**
+```{r,warning=FALSE, message=FALSE}
+grup=cutree(hc_e_w, k=5)
+
+table(grup)
+
+
+fviz_dend(hc_e_w, k = 5, # Cut in four groups
+          cex = 0.5, # label size
+          k_colors = "lancet",
+          color_labels_by_k = TRUE, # color labels by groups
+          rect = TRUE # Add rectangle around groups
+)
+
+
+fviz_cluster(list(data = data, cluster = grup),
+             palette = "lancet",
+             ellipse.type = "convex", # Concentration ellipse
+             repel = TRUE, # Avoid label overplotting (slow)
+             show.clust.cent = FALSE, ggtheme = theme_minimal())
+
+
+km_data_hc5 <- eclust(pca2, "hclust", k = 5, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_hc5, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_hc5$silinfo
+hc_5 <- silinfo$avg.width
+
+```
+
+* The number of elements of the clusters is still unbalanced, so I cannot use the 5-cluster model.
+* The cluster graph looks less intertwined, but the silhouette value decreases as the number of clusters increases. This makes me look more favorably to the 3-cluster model.
+
+#### **6 Group**
+```{r,warning=FALSE, message=FALSE}
+grup=cutree(hc_e_w, k=6)
+
+table(grup)
+
+
+
+fviz_dend(hc_e_w, k = 6, # Cut in four groups
+          cex = 0.5, # label size
+          k_colors = "lancet",
+          color_labels_by_k = TRUE, # color labels by groups
+          rect = TRUE # Add rectangle around groups
+)
+
+
+fviz_cluster(list(data = data, cluster = grup),
+             palette = "lancet",
+             ellipse.type = "convex", # Concentration ellipse
+             repel = TRUE, # Avoid label overplotting (slow)
+             show.clust.cent = FALSE, ggtheme = theme_minimal())
+
+
+km_data_hc6 <- eclust(pca2, "hclust", k = 6, nstart = 25, graph = TRUE)
+fviz_silhouette(km_data_hc6, palette = "jco",
+                ggtheme = theme_classic())
+silinfo <- km_data_hc6$silinfo
+hc_6 <- silinfo$avg.width
+```
+* As the number of balanced elements, 6 clusters gave the best result.
+* Inter-cluster variance seems to have decreased.
+* The nesting problem seems to be reduced as well.
+* However, I think that the clustering graphics on this data set are a bit misleading. As I mentioned, when you look at the clustering graph, there is no nesting. As the number of clusters increases, the problem of high variance within the cluster decreases, but the silhouette coefficient decreases constantly, which means that as the number of clusters increases, the quality of the cluster decreases.
+* For this reason, my preference in the Hierarchical Clustering method is the 3-cluster model.
+
+
+### **Model Based Clustering**
+* Unlike other clustering methods, model-based clustering clusters with the Expectation Maximization (EM) method.    
+
+```{r,warning=FALSE, message=FALSE}
+mc=Mclust(pca2)
+summary(mc)
+head(mc$z)
+head(mc$classification,10)
+```
+
+* The algorithm considered 3 clusters appropriate and determined their shape as elliptical.
+* The Mclust algorithm outputs the Volume-Shape-Orientation information of the clusters it creates in letters. He gave VEE for this model, that is, their volumes are different, their shapes and orientations are equal.
+* From the clustering table, the level of belonging of the observations to the clusters is shown. Denmark belongs to cluster 1 with ~98%, while the Netherlands belongs to cluster 1 with 61% and 38% to second cluster. Of course, the algorithm chooses cluster 1 which is higher in the Dutch observation.
+
+#### **Visualization of Model Based Clustering**
+```{r,warning=FALSE, message=FALSE}
+# BIC values used for choosing the number of clusters
+fviz_mclust(mc, "BIC", palette = "jco")
+
+
+fviz_mclust(mc, "classification", geom = "point",
+            pointsize = 1.5, palette = "jco")
+# Classification uncertainty
+fviz_mclust(mc, "uncertainty", palette = "jco",pos = FALSE)
+
+
+```
+
+* When we select the BIC value as the Mclust model selection parameter, it finds the best model in 3 clusters.
+* When we visualize the Mclust algorithm, we see clusters that are elliptical and very different in volume from each other which is not acceptable.
+* When we look at the uncertainty graph, we see that many points (large ones) are not assigned to the cluster they belong to with high reliability, but may belong to another cluster.
+* I don't think this method is very suitable for this data because the resulting graph is very interpretable, not suitable for cluster analysis.
+
+### **Density Based Clustering**
+
+* Density-based clustering methods perform well on data that form spherical and convex patterns. We'll see how successful it will be for our data.
+
+```{r,warning=FALSE, message=FALSE}
+set.seed(123)
+dbscan::kNNdistplot(pca2, k = 5)
+abline(h = 0.15, lty = 2)
+
+db <- fpc::dbscan(pca2, eps = 0.15, MinPts = 5)
+print(db)
+```
+
+* Density-based clustering failed to form clusters. It defined all 167 observations as 0, that is, outlier. Anyway, the shape of our data on the graph was not suitable for this analysis, but it is interesting that it did not form any clusters.
+
+### **Cluster Validity Statistics**
+
+* I will examine the link, silhouette and dunn coefficients using the clValid library.
+
+```{r,warning=FALSE, message=FALSE}
+
+clmethods <- c("hierarchical","kmeans","pam")
+intern <- clValid(pca2, nClust = 2:6,
+                  clMethods = clmethods, validation = "internal")
+summary(intern)
+
+```
+
+* When we examine the tables, we see the results while performing the analyzes one by one.
+* In clusters of 3, k-means and k-medoids give better results in connectivity and link, while kmeans perform better in dunn index
+* The silhouette coefficients of the 2-cluster clusters are the highest, but the inter-cluster variances are very large.
+* Connection values of clusters of 4 are better than clusters of 3, but the number of elements between clusters is unbalanced there.
+* In the cluster analysis of this data, I always have to give up a value while one value improves.
+* When you keep the number of clusters low (2-3) the variance within the cluster becomes too much.
+* When the number of clusters is 4-5, the number of elements of the clusters becomes very unbalanced.
+* If I increase the number of clusters even more, this time the graphs look better, but the statistical criteria get worse
+* If I were to take this situation into consideration and decide, I would choose 3 clusters for hierarchical clustering, it seems to be the most optimal.
+
+
+### **Obtain the descriptive statistics of the clusters you have obtained in the final result and interpret them in detail.** 
+
+
+```{r,warning=FALSE, message=FALSE}
+
+grup=cutree(hc_e_w, k=3)
+table(grup)
+g1 <- rownames(data)[grup==1]  
+g2 <- rownames(data)[grup==2]  
+g3 <- rownames(data)[grup==3]
+
+gruplar <- as.data.frame(grup, colnames = "grup")
+grupludata <- cbind(data,gruplar)
+head(grupludata)
+summary(data[g1,])
+summary(data[g2,])
+summary(data[g3,])
+```
+
+* I got the descriptive statistics of the groups I created, but it is very difficult to interpret them from the summary command.
+* Let's take the average of all the independent variables of all groups that I will use visualization and examine in the graph.
+
+```{r,warning=FALSE, message=FALSE}
+
+grupludata %>% 
+    group_by(grup=factor(grup)) %>%
+    summarise_each(funs(mean)) %>% 
+    gather(Var, Val, -grup) %>%
+    ggplot(., aes(x=Var, y=Val, fill=grup))+
+    geom_bar(stat='identity', position='dodge')+
+    coord_flip()
+```
+
+* Before starting to comment on the graph, as a result of the analysis which we made with the 2-variable data we obtained in the pca analysis that I mentioned before, there was no particular group or feature represented by these variables. 2 variables that mentioned all independent variables of the original data were represented in close proportions.
+* As a result of this situation and as a result of clustering analysis, it is seen that 3 groups of all data are formed as clusters of good-moderate-bad overall scores.
+* 1st group has high mean in all variables, 2nd group has medium, 3rd group has low mean.
+* As a result, I do not think that this data is very suitable for cluster analysis. Maybe I will support this idea with the hopkins statistics that I should have done at the beginning of the analysis.
+
+```{r,warning=FALSE, message=FALSE}
+h_data=hopkins(pca2, nrow(data)-1)
+h_data
+```
+* The closer the Hopkins statistic to 0.5, the more difficult it is to perform clustering analysis on the data. The closer to 0, the more appropriate the data for clustering analysis.
+* As you can see, the hopkins statistic of the PCA-analyzed data is 0.41, which is very close to 0.5, which is the non apporpiate for clustering analysis value.
+
+
+
+
+
